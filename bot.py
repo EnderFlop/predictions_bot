@@ -50,6 +50,7 @@ class PredictionsBot(commands.Cog):
     """, color=self.color)
     await ctx.send(embed=embed)
 
+  @commands.has_permissions(manage_messages=True)
   @commands.command(command="makeprediction", aliases=["startprediction"])
   async def makeprediction(self, ctx, bet_text, option_one, option_two):
     if self.current_prediction is not None:
@@ -110,7 +111,8 @@ class PredictionsBot(commands.Cog):
 
   @commands.command(command="debug")
   async def debug(self, ctx):
-    await self.makeprediction(ctx, "max will lose this level", "yes", "no")
+    if ctx.author.id == 164822993489362953: #this is my id, only I can use the debug function
+      await self.makeprediction(ctx, "max will lose this level", "yes", "no")
 
   @commands.command(command="endprediction")
   async def endprediction(self, ctx, winning_op):
@@ -125,16 +127,20 @@ class PredictionsBot(commands.Cog):
       await ctx.send(embed=embed)
       db = sqlite3.connect("main.sqlite")
       cursor = db.cursor()
+      option_one_sum = sum([i[1] for i in self.current_prediction.option_one_bettors])
+      option_two_sum = sum([i[1] for i in self.current_prediction.option_two_bettors])
       if winning_op == current_op_one:
         for user, amount in self.current_prediction.option_one_bettors:
           cursor.execute(f"SELECT points FROM main WHERE user_id = {user.id}")
           current_points = cursor.fetchone()[0]
-          cursor.execute(f"UPDATE main SET points = {current_points + (amount * 2)} WHERE user_id = {user.id}")
+          ratio = option_two_sum / option_one_sum # if $100 is on one and $200 is on two, then if one wins you get two dollars for every $1 you bet. 200/100 = 2, amount*ratio = amount won
+          cursor.execute(f"UPDATE main SET points = {current_points + amount + (round(amount * ratio, 2))} WHERE user_id = {user.id}")
       elif winning_op == current_op_two:
         for user, amount in self.current_prediction.option_two_bettors:
           cursor.execute(f"SELECT points FROM main WHERE user_id = {user.id}")
           current_points = cursor.fetchone()[0]
-          cursor.execute(f"UPDATE main SET points = {current_points + (amount * 2)} WHERE user_id = {user.id}")
+          ratio = option_one_sum / option_two_sum # if $100 is on one and $200 is on two, then if two wins you get 0.5 dollars for every $1 you bet. 100/200 = 0.5, amount*ratio = amount won
+          cursor.execute(f"UPDATE main SET points = {current_points + amount + (round(amount * ratio, 2))} WHERE user_id = {user.id}")
       db.commit()
       db.close()
       self.current_prediction = None
@@ -143,7 +149,7 @@ class PredictionsBot(commands.Cog):
   async def balance(self, ctx):
     db = sqlite3.connect("main.sqlite")
     cursor = db.cursor()
-    cursor.execute(f"SELECT points FROM main WHERE user_id = {ctx.author.id}")
+    cursor.execute(f"SELECT * FROM main WHERE user_id = {ctx.author.id}")
     result = cursor.fetchone()
     user_id, points = result
     if result is None:
