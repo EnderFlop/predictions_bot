@@ -26,6 +26,7 @@ class Prediction():
     self.owner = owner
     self.id = id
     self.embed = embed
+    self.allowing_bets = True
     self.option_one_bettors = []
     self.option_two_bettors = []
   
@@ -74,6 +75,10 @@ class PredictionsBot(commands.Cog):
   @commands.command(command="bet", aliases=["predict"])
   async def bet(self, ctx, option, amount_bet):
     if self.current_prediction is not None:
+      if self.current_prediction.allowing_bets is False:
+        await ctx.message.add_reaction("❌")
+        await ctx.author.send("Bets are closed, sorry!")
+        return
       db = sqlite3.connect("main.sqlite")
       cursor = db.cursor()
       cursor.execute(f"SELECT * FROM main WHERE user_id = {ctx.author.id}")
@@ -117,9 +122,22 @@ class PredictionsBot(commands.Cog):
     if ctx.author.id == 164822993489362953: #this is my id, only I can use the debug function
       await self.makeprediction(ctx, "max will lose this level", "yes", "no")
 
+  @commands.command(command="closebets")
+  async def closebets(self, ctx):
+    if self.current_prediction is not None:
+      if ctx.author == self.current_prediction.owner:
+        self.current_prediction.allowing_bets = False
+        embed = discord.Embed(title="No More Bets!", color=self.color)
+        await ctx.message.add_reaction("✅")
+        await ctx.send(embed=embed)
+      else:
+        await ctx.message.add_reaction("❌")
+        await ctx.author.send(f"You aren't the owner! Ask {self.current_prediction.owner} to close betting with !closebets")
+
+
   @commands.command(command="endprediction")
   async def endprediction(self, ctx, winning_op):
-    if self.current_prediction != None and ctx.author == self.current_prediction.owner:
+    if self.current_prediction is not None and ctx.author == self.current_prediction.owner:
       current_op_one, current_op_two = self.current_prediction.get_current_options()
       winning_op = winning_op.lower()
       if winning_op not in [current_op_one, current_op_two]:
