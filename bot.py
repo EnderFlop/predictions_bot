@@ -3,8 +3,10 @@ import discord
 import asyncio
 import uuid
 import sqlite3
+from io import BytesIO
 from dotenv import load_dotenv
 from discord.ext import tasks, commands
+from progressbar import create_progress_bar
 
 load_dotenv()
 
@@ -17,12 +19,13 @@ async def on_ready():
   await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"people win bets!"))
 
 class Prediction():
-  def __init__(self, bet_text, option_one, option_two, owner, id):
+  def __init__(self, bet_text, option_one, option_two, owner, id, embed):
     self.bet_text = bet_text
     self.option_one = option_one
     self.option_two = option_two
     self.owner = owner
     self.id = id
+    self.embed = embed
     self.option_one_bettors = []
     self.option_two_bettors = []
   
@@ -66,7 +69,7 @@ class PredictionsBot(commands.Cog):
     await ctx.send(embed=embed)
     prediction_owner = ctx.author
     prediction_id = uuid.uuid4()
-    self.current_prediction = Prediction(bet_text, option_one, option_two, prediction_owner, prediction_id)
+    self.current_prediction = Prediction(bet_text, option_one, option_two, prediction_owner, prediction_id, embed)
   
   @commands.command(command="bet", aliases=["predict"])
   async def bet(self, ctx, option, amount_bet):
@@ -195,6 +198,21 @@ class PredictionsBot(commands.Cog):
       await ctx.send(embed=embed)
     db.commit()
     db.close()
+  
+  @commands.command(command="current", aliases=["p", "prediction"]) #re-sends the current bet message
+  async def current(self, ctx):
+    if self.current_prediction is not None:
+      embed = self.current_prediction.embed
+      embed.title = "Here is the current prediction."
+      option_one_sum = sum([i[1] for i in self.current_prediction.option_one_bettors])
+      option_two_sum = sum([i[1] for i in self.current_prediction.option_two_bettors])
+      new_meter = create_progress_bar(option_one_sum, option_two_sum)
+      with BytesIO() as image_binary:
+        new_meter.save(image_binary, "PNG")
+        image_binary.seek(0)
+        file = discord.File(image_binary, filename="meter.png")
+        embed.set_image(url="attachment://meter.png")
+        await ctx.send(file=file, embed=embed)
 
 bot.add_cog(PredictionsBot())
 bot.run(BOT_TOKEN)
